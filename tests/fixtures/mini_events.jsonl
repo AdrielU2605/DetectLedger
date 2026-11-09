@@ -1,0 +1,6 @@
+{"EventID": 1, "Channel": "Microsoft-Windows-Sysmon/Operational", "SourceName": "Microsoft-Windows-Sysmon", "Hostname": "TESTHOST1", "UtcTime": "2024-01-01 10:00:00.000", "Image": "C:\\Windows\\System32\\rundll32.exe", "CommandLine": "rundll32.exe C:\\Windows\\System32\\comsvcs.dll, MiniDump 624 C:\\temp\\out.dmp full"}
+{"EventID": "4688", "Channel": "Security", "SourceName": "Microsoft-Windows-Security-Auditing", "Hostname": "TESTHOST1", "@timestamp": "2024-01-01T10:00:01.000Z", "NewProcessName": "C:\\Windows\\System32\\whoami.exe"}
+
+this line is not json
+[1, 2, 3]
+{"EventID": "not-a-number", "Channel": "Security", "host": {"name": "TESTHOST2"}}

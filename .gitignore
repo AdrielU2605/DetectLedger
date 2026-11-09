@@ -1,0 +1,9 @@
+# Downloaded datasets and local databases are reproducible via `detectledger fetch`
+data/
+*.db
+*.sqlite
+
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
