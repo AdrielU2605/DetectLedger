@@ -13,6 +13,7 @@ LEVEL_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational":
 # The fields an analyst looks at first, in reading order. Only those present are shown.
 KEY_FIELDS = (
     "User", "SubjectUserName", "SubjectDomainName", "TargetUserName",
+    "LogonType", "IpAddress", "WorkstationName", "AuthenticationPackageName",
     "Image", "NewProcessName", "CommandLine", "ParentImage", "ParentProcessName", "ParentCommandLine",
     "SourceImage", "TargetImage", "GrantedAccess",
     "ServiceName", "ImagePath", "ServiceFileName",

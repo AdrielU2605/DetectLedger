@@ -283,11 +283,17 @@ class Rule:
     selections: dict[str, Selection]
     condition: Evaluator
     path: Path | None = None
+    references: list[str] = field(default_factory=list)
 
     @property
     def techniques(self) -> list[str]:
         """ATT&CK technique IDs from tags like 'attack.t1003.001'."""
         return [t.split(".", 1)[1].upper() for t in self.tags if re.fullmatch(r"attack\.t\d{4}(\.\d{3})?", t)]
+
+    @property
+    def tactics(self) -> list[str]:
+        """ATT&CK tactics from tags like 'attack.credential_access'."""
+        return [t.split(".", 1)[1] for t in self.tags if re.fullmatch(r"attack\.[a-z_]+", t)]
 
     @classmethod
     def from_dict(cls, doc: dict, path: Path | None = None) -> Rule:
@@ -310,6 +316,7 @@ class Rule:
             selections=selections,
             condition=compile_condition(condition, list(selections)),
             path=path,
+            references=list(doc.get("references", [])),
         )
 
     def matches(self, event: dict, source: Source) -> bool:
