@@ -8,7 +8,9 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-BASE = "https://raw.githubusercontent.com/OTRF/Security-Datasets/master/datasets/atomic/windows"
+# Pinned to a specific commit so the test data can never change underneath us.
+OTRF_COMMIT = "d9d40ef123d2c87d5d3df28c96bcab4f0faccc87"
+BASE = f"https://raw.githubusercontent.com/OTRF/Security-Datasets/{OTRF_COMMIT}/datasets/atomic/windows"
 
 
 @dataclass(frozen=True)

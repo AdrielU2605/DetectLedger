@@ -1,0 +1,33 @@
+title: Local User Account Created via net.exe
+id: db696b9d-0cc6-413f-b6a8-8175f0a365ac
+status: experimental
+description: |
+  Detects 'net user <name> /add' (or net1.exe, which net.exe calls internally). Attackers create
+  backdoor accounts to keep access even if their malware is removed. Admins rarely create accounts
+  from the command line in managed environments, so this is worth reviewing.
+references:
+  - https://attack.mitre.org/techniques/T1136/001/
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.persistence
+  - attack.t1136.001
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_img:
+    - Image|endswith:
+        - '\net.exe'
+        - '\net1.exe'
+    - OriginalFileName:
+        - 'net.exe'
+        - 'net1.exe'
+  selection_cmd:
+    CommandLine|contains|all:
+      - ' user '
+      - ' /add'
+  condition: all of selection_*
+falsepositives:
+  - Legitimate admin or provisioning scripts; check the parent process and who ran it
+level: medium

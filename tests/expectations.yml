@@ -1,0 +1,35 @@
+# What each rule MUST do against the recorded datasets.
+#
+#   key      = rule file name (without .yml)
+#   fires_on = dataset -> exact number of alerts expected
+#
+# Any dataset not listed for a rule must produce ZERO alerts (false-positive check).
+# Exact counts catch both regressions: a rule that stops firing, or one that starts firing
+# on more events than it should. If you intentionally change a rule, update its counts here.
+
+lsass_dump_comsvcs:
+  fires_on: {lsass_comsvcs: 2}            # Sysmon 1 + Security 4688 of the same process
+
+lsass_suspicious_access:
+  fires_on: {lsass_comsvcs: 2, mimikatz_logonpasswords: 1}
+
+sam_hive_dump_reg:
+  fires_on: {sam_reg_dump: 2}
+
+dcsync_replication:
+  fires_on: {dcsync: 3}
+
+service_install_suspicious_imagepath:
+  fires_on: {psexec: 1}
+
+wmic_remote_process_create:
+  fires_on: {wmic_add_user: 2}
+
+local_account_created_net:
+  fires_on: {wmic_add_user: 4}            # net.exe and its net1.exe child, each in Sysmon + Security
+
+run_key_suspicious_value:
+  fires_on: {run_key_persistence: 1}
+
+schtask_suspicious_create:
+  fires_on: {schtask_create: 2}

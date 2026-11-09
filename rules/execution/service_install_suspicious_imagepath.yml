@@ -1,0 +1,42 @@
+title: Service Installed with a Shell or PowerShell Command Line
+id: d24aaec2-c737-430f-a430-1c5540c5576a
+status: experimental
+description: |
+  Detects a new Windows service whose executable path is really a command line that launches
+  cmd or PowerShell. Real services point to a service binary. PsExec-style lateral movement
+  (Impacket, Empire, Cobalt Strike) creates a throwaway service on the remote host to run a payload,
+  often an encoded PowerShell stager.
+references:
+  - https://attack.mitre.org/techniques/T1569/002/
+  - https://attack.mitre.org/techniques/T1543/003/
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.execution
+  - attack.lateral_movement
+  - attack.t1569.002
+  - attack.t1543.003
+logsource:
+  product: windows
+  service: system
+detection:
+  selection_event:
+    EventID: 7045
+    Provider_Name|contains: 'Service Control Manager'
+  selection_event_alt:
+    EventID: 7045
+    SourceName|contains: 'Service Control Manager'
+  selection_path:
+    ImagePath|contains:
+      - '%COMSPEC%'
+      - 'cmd.exe /c'
+      - 'cmd /c'
+      - 'powershell'
+      - 'pwsh'
+      - ' -enc'
+      - 'mshta'
+      - 'rundll32'
+  condition: 1 of selection_event* and selection_path
+falsepositives:
+  - Some software installers register services through a cmd wrapper; verify the installing account and binary
+level: high

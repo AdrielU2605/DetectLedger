@@ -1,0 +1,45 @@
+name: detections
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      # Datasets are pinned to an OTRF commit, so the cache key only changes when the catalog does.
+      - name: Cache attack datasets
+        uses: actions/cache@v4
+        with:
+          path: data/*.zip
+          key: otrf-${{ hashFiles('src/detectledger/datasets.py') }}
+
+      - name: Load attack datasets
+        run: detectledger fetch --all
+
+      - name: Unit + detection tests
+        run: pytest -v
+
+      - name: Publish detection matrix
+        if: always()
+        run: |
+          echo "## Detection matrix" >> "$GITHUB_STEP_SUMMARY"
+          echo "Each rule should fire only on its own attack recording." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          detectledger hunt --markdown >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,38 @@
+title: Registry Run Key Set to a Script Interpreter or Suspicious Path
+id: 9252297e-41d5-4f65-9456-fc07369b6635
+status: experimental
+description: |
+  Detects a Run/RunOnce autostart value that launches PowerShell, a shell, or a script host, or
+  points into a user-writable folder. Programs listed under Run start every time a user logs on,
+  which makes it one of the most common persistence spots. Legitimate entries almost always point
+  to an installed .exe under Program Files.
+references:
+  - https://attack.mitre.org/techniques/T1547/001/
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.persistence
+  - attack.t1547.001
+logsource:
+  product: windows
+  category: registry_set
+detection:
+  selection_key:
+    TargetObject|contains: '\Software\Microsoft\Windows\CurrentVersion\Run'
+  selection_value:
+    Details|contains:
+      - 'powershell'
+      - 'pwsh'
+      - 'cmd.exe /c'
+      - 'cmd /c'
+      - 'mshta'
+      - 'rundll32'
+      - 'wscript'
+      - 'cscript'
+      - ' -enc'
+      - '\AppData\Local\Temp\'
+      - '\Users\Public\'
+  condition: all of selection_*
+falsepositives:
+  - Some vendor updaters register PowerShell-based autostarts; verify the writing process
+level: high

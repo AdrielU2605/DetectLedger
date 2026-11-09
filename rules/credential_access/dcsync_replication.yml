@@ -1,0 +1,36 @@
+title: DCSync - Directory Replication Requested by a Non-DC Account
+id: 1152746c-e2ec-4b7f-8ae6-e8585f8e33b5
+status: experimental
+description: |
+  Detects an account requesting Active Directory replication rights (DS-Replication-Get-Changes
+  and friends) on a domain controller. Domain controllers do this legitimately with their machine
+  accounts (names ending in '$'). When a user account does it, it is usually Mimikatz lsadump::dcsync
+  pulling password hashes, including krbtgt, without touching the DC's disk.
+  Requires "Audit Directory Service Access" on domain controllers (Security event 4662).
+references:
+  - https://attack.mitre.org/techniques/T1003/006/
+  - https://learn.microsoft.com/windows/win32/adschema/extended-rights
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.credential_access
+  - attack.t1003.006
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4662
+    AccessMask: '0x100'   # Control Access (extended right)
+    Properties|contains:
+      - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'   # DS-Replication-Get-Changes
+      - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'   # DS-Replication-Get-Changes-All
+      - '89e95b76-444d-4c62-991a-0facbeda640c'   # DS-Replication-Get-Changes-In-Filtered-Set
+  filter_machine_accounts:
+    SubjectUserName|endswith: '$'                 # DCs replicating with each other
+  filter_aad_connect:
+    SubjectUserName|startswith: 'MSOL_'           # Azure AD Connect sync account
+  condition: selection and not 1 of filter_*
+falsepositives:
+  - Azure AD Connect or other identity sync services running under a custom service account
+level: critical

@@ -1,0 +1,48 @@
+title: Suspicious Scheduled Task Created with schtasks.exe
+id: 6d2335b7-57c6-4888-81aa-0897a24f960d
+status: experimental
+description: |
+  Detects schtasks.exe creating a task that runs as SYSTEM, targets a remote host, or launches a
+  shell/script interpreter. Creating tasks alone is common, so this rule requires at least one of
+  those riskier traits. Attackers use tasks for persistence and remote execution, and often name
+  them to blend in under \Microsoft\Windows\.
+references:
+  - https://attack.mitre.org/techniques/T1053/005/
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.execution
+  - attack.persistence
+  - attack.t1053.005
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_img:
+    - Image|endswith: '\schtasks.exe'
+    - OriginalFileName: 'schtasks.exe'
+  selection_create:
+    CommandLine|contains: '/create'
+  susp_system:
+    CommandLine|contains:
+      - '/ru system'
+      - '/ru "system"'
+      - '/ru "nt authority\system"'
+  susp_remote:
+    CommandLine|contains: ' /s '
+  susp_payload:
+    CommandLine|contains:
+      - 'cmd.exe /c'
+      - 'cmd /c'
+      - 'powershell'
+      - 'mshta'
+      - 'rundll32'
+      - 'wscript'
+      - 'cscript'
+      - '\AppData\'
+      - '\Users\Public\'
+      - '\Temp\'
+  condition: selection_img and selection_create and 1 of susp_*
+falsepositives:
+  - Software deployment and IT management tools that create SYSTEM tasks; baseline and filter them by parent process
+level: medium

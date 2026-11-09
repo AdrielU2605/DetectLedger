@@ -69,14 +69,25 @@ def cmd_hunt(args) -> int:
         print("No events loaded yet. Try: detectledger fetch --all")
         return 0
 
-    width = max(len(r.title) for r in rules)
-    short = {d: d[:10] for d in loaded}
-    print(f"{'rule':<{width}}  " + " ".join(f"{short[d]:>10}" for d in loaded))
+    results = []
     for rule in rules:
         alerts = run_rule(conn, rule, args.dataset)
         counts = {d: 0 for d in loaded}
         for a in alerts:
             counts[a.dataset] += 1
+        results.append((rule, alerts, counts))
+
+    if args.markdown:
+        print("| Rule | ATT&CK | " + " | ".join(loaded) + " |")
+        print("|---|---|" + "---:|" * len(loaded))
+        for rule, _, counts in results:
+            cells = " | ".join(str(counts[d] or "-") for d in loaded)
+            print(f"| {rule.title} | {', '.join(rule.techniques)} | {cells} |")
+        return 0
+
+    width = max(len(r.title) for r in rules)
+    print(f"{'rule':<{width}}  " + " ".join(f"{d[:10]:>10}" for d in loaded))
+    for rule, alerts, counts in results:
         cells = " ".join(f"{(counts[d] or '.'):>10}" for d in loaded)
         print(f"{rule.title:<{width}}  {cells}")
         if args.show:
@@ -108,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     h.add_argument("--rules", default="rules", help="folder of Sigma .yml rules (default: rules)")
     h.add_argument("--dataset", help="only search this dataset")
     h.add_argument("--show", action="store_true", help="print each alert under its rule")
+    h.add_argument("--markdown", action="store_true", help="print the results as a Markdown table")
     h.set_defaults(func=cmd_hunt)
     return p
 
