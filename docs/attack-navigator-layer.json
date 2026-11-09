@@ -1,0 +1,110 @@
+{
+  "name": "DetectLedger coverage",
+  "versions": {
+    "layer": "4.5",
+    "navigator": "5.1.0"
+  },
+  "domain": "enterprise-attack",
+  "description": "Techniques detected by DetectLedger Sigma rules. Green = validated against real attack telemetry in CI. Score = number of rules.",
+  "techniques": [
+    {
+      "techniqueID": "T1003.001",
+      "score": 2,
+      "color": "#31a354",
+      "comment": "Rules: LSASS Memory Dump via comsvcs.dll MiniDump; Suspicious Process Access to LSASS Memory. Validated in CI on: lsass_comsvcs, mimikatz_logonpasswords",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1003.002",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: SAM / SYSTEM / SECURITY Hive Dump via reg.exe. Validated in CI on: sam_reg_dump",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1003.006",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: DCSync - Directory Replication Requested by a Non-DC Account. Validated in CI on: dcsync",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1027",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Hidden Encoded PowerShell Stager or Its Child Process. Validated in CI on: dcsync, mimikatz_logonpasswords, psexec, sam_reg_dump, wmic_add_user",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1047",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Remote Process Creation via WMIC. Validated in CI on: wmic_add_user",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1053.005",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Suspicious Scheduled Task Created with schtasks.exe. Validated in CI on: schtask_create",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1059.001",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Hidden Encoded PowerShell Stager or Its Child Process. Validated in CI on: dcsync, mimikatz_logonpasswords, psexec, sam_reg_dump, wmic_add_user",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1136.001",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Local User Account Created via net.exe. Validated in CI on: wmic_add_user",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1543.003",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Service Installed with a Shell or PowerShell Command Line. Validated in CI on: psexec",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1547.001",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Registry Run Key Set to a Script Interpreter or Suspicious Path. Validated in CI on: run_key_persistence",
+      "enabled": true,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1569.002",
+      "score": 1,
+      "color": "#31a354",
+      "comment": "Rules: Service Installed with a Shell or PowerShell Command Line. Validated in CI on: psexec",
+      "enabled": true,
+      "showSubtechniques": true
+    }
+  ],
+  "legendItems": [
+    {
+      "label": "Detected + validated in CI",
+      "color": "#31a354"
+    },
+    {
+      "label": "Detected, not validated",
+      "color": "#fdae61"
+    }
+  ],
+  "hideDisabled": false
+}

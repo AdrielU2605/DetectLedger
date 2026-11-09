@@ -137,6 +137,24 @@ def cmd_context(args) -> int:
     return 0
 
 
+def cmd_coverage(args) -> int:
+    import json
+
+    from .coverage import load_expectations, markdown_table, navigator_layer
+    from .sigma import load_rules
+
+    rules = load_rules(args.rules)
+    expectations = load_expectations(args.expectations)
+    if args.navigator:
+        with open(args.navigator, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(navigator_layer(rules, expectations), fh, indent=2)
+            fh.write("\n")
+        print(f"wrote ATT&CK Navigator layer: {args.navigator}")
+    else:
+        print(markdown_table(rules, expectations))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="detectledger", description=__doc__)
     p.add_argument("--db", default=DEFAULT_DB, help=f"SQLite database path (default: {DEFAULT_DB})")
@@ -172,6 +190,12 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--minutes", type=int, default=5, help="window before/after the alert (default 5)")
     x.add_argument("--rules", default="rules")
     x.set_defaults(func=cmd_context)
+
+    v = sub.add_parser("coverage", help="MITRE ATT&CK coverage table, or an ATT&CK Navigator layer")
+    v.add_argument("--rules", default="rules")
+    v.add_argument("--expectations", default="tests/expectations.yml")
+    v.add_argument("--navigator", metavar="PATH", help="write a Navigator layer JSON file instead")
+    v.set_defaults(func=cmd_coverage)
     return p
 
 

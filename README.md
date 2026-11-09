@@ -2,16 +2,43 @@
 
 [![detections](https://github.com/AdrielU2605/DetectLedger/actions/workflows/detections.yml/badge.svg)](https://github.com/AdrielU2605/DetectLedger/actions/workflows/detections.yml)
 
-**Detection-as-code for Windows attacks.** Sigma detection rules, version-controlled and
-automatically tested in CI against *real* recorded attack telemetry. Each rule must fire on
-the attack it targets and stay quiet on everything else.
+**Detection-as-code for Windows attacks.** 10 Sigma detection rules, version-controlled and
+tested in CI against **~33,700 real Windows events** recorded during lab attacks (Mimikatz,
+DCSync, PsExec, WMI lateral movement, and more). Every rule must fire on the attack it targets
+and stay silent everywhere else. An **MCP server** lets an AI assistant investigate the alerts
+and write incident reports.
 
-> Status: 🚧 in progress. Loader, Sigma engine, 9 rules, and CI done. Next: timelines and AI triage.
+```
+logs (OTRF recordings) ─► ingest + UTC clock alignment ─► SQLite ─► Sigma engine ─► alerts
+                                                                         │              │
+                                              CI: expected counts per rule/dataset    timeline, context,
+                                              (true positives + zero false positives)  MCP triage server
+```
+
+## Highlights
+
+- **Catches attacks by behavior, not names.** The LSASS rule flags any process requesting
+  memory-read access to `lsass.exe`, so it caught Mimikatz running **in-memory inside PowerShell**
+  with no `mimikatz.exe` on disk.
+- **Rules are tested like code.** [`tests/expectations.yml`](tests/expectations.yml) pins the exact
+  alert count each rule must produce on each recording. Loosening a rule (e.g. allowing access mask
+  `0x1000`) fails CI immediately: 3 alerts instead of 1.
+- **Real log-pipeline problems, found and fixed:**
+  - A collector wrote `security` instead of `Security`, making **481 events invisible** to every
+    rule. Fixed with case-insensitive matching plus a regression test.
+  - Timestamp labels lie. One field ending in `Z` (claiming UTC) was really 5 hours off, another 16.
+    DetectLedger **learns each recording's clock offsets** from Sysmon's trusted `UtcTime`, so
+    cross-source timelines line up to the millisecond.
+- **AI-assisted triage, built with prompt injection in mind.** Attackers control their own command
+  lines, so every MCP tool result is labeled untrusted, the database is opened read-only, and output
+  is bounded. See the [sample triage report](docs/sample-triage-report.md).
+- **The triage → detection loop works.** Triage found that nothing alerted on the encoded Empire
+  PowerShell stager. The new rule written for it also caught attacker `whoami /user` recon that no
+  other rule saw.
 
 ## Detection matrix
 
-Every rule runs against every recording (~33,700 real Windows events). Numbers are alerts;
-`-` means silent. CI fails if any cell changes unexpectedly.
+Alerts per rule (rows) per attack recording (columns). `-` = silent. CI fails if any cell changes.
 
 | Rule | ATT&CK | dcsync | lsass_comsvcs | mimikatz | psexec | run_key | sam_reg_dump | schtask | wmic_add_user |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -19,38 +46,36 @@ Every rule runs against every recording (~33,700 real Windows events). Numbers a
 | LSASS dump via comsvcs.dll | T1003.001 | - | **2** | - | - | - | - | - | - |
 | Suspicious access to LSASS memory | T1003.001 | - | **2** | **1** | - | - | - | - | - |
 | SAM/SYSTEM hive dump via reg.exe | T1003.002 | - | - | - | - | - | **2** | - | - |
+| Hidden encoded PowerShell stager or child | T1059.001, T1027 | **1** | - | **1** | **4** | - | **1** | - | **1** |
 | Service installed with shell command line | T1569.002, T1543.003 | - | - | - | **1** | - | - | - | - |
 | Remote process creation via WMIC | T1047 | - | - | - | - | - | - | - | **2** |
 | Local account created via net.exe | T1136.001 | - | - | - | - | - | - | - | **4** |
 | Run key set to script interpreter | T1547.001 | - | - | - | - | **1** | - | - | - |
 | Suspicious scheduled task | T1053.005 | - | - | - | - | - | - | **2** | - |
 
-Highlights:
-- The LSASS access rule catches Mimikatz **by behavior** (requesting memory-read access to
-  lsass.exe), even though it ran in-memory inside PowerShell with no `mimikatz.exe` on disk.
-- Process rules match both Sysmon event 1 and Security event 4688, so they keep working if one
-  log source is missing.
+The PowerShell-stager row fires on five recordings on purpose: those attacks all used the same
+Empire launcher, and every hit is attacker activity.
 
-## Rules
+## ATT&CK coverage
 
-| Rule | ATT&CK | Detects |
-|---|---|---|
-| [dcsync_replication](rules/credential_access/dcsync_replication.yml) | T1003.006 | AD replication rights requested by a non-machine account (4662) |
-| [lsass_dump_comsvcs](rules/credential_access/lsass_dump_comsvcs.yml) | T1003.001 | rundll32 + comsvcs.dll MiniDump (living-off-the-land LSASS dump) |
-| [lsass_suspicious_access](rules/credential_access/lsass_suspicious_access.yml) | T1003.001 | Any process opening LSASS with memory-read / full access |
-| [sam_hive_dump_reg](rules/credential_access/sam_hive_dump_reg.yml) | T1003.002 | reg.exe saving the SAM / SYSTEM / SECURITY hives |
-| [service_install_suspicious_imagepath](rules/execution/service_install_suspicious_imagepath.yml) | T1569.002 | New service whose binary path is a cmd/PowerShell command (PsExec-style) |
-| [wmic_remote_process_create](rules/lateral_movement/wmic_remote_process_create.yml) | T1047 | `wmic /node:... process call create` |
-| [local_account_created_net](rules/persistence/local_account_created_net.yml) | T1136.001 | `net user ... /add` backdoor accounts |
-| [run_key_suspicious_value](rules/persistence/run_key_suspicious_value.yml) | T1547.001 | Run/RunOnce autostart pointing at a script interpreter or temp path |
-| [schtask_suspicious_create](rules/persistence/schtask_suspicious_create.yml) | T1053.005 | schtasks /create as SYSTEM, remote, or launching a shell |
+**11 techniques across 5 tactics, all validated in CI.** Load
+[`docs/attack-navigator-layer.json`](docs/attack-navigator-layer.json) in the
+[ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) ("Open Existing Layer" →
+"Upload from local") to see them on the full matrix.
 
-## Why
-
-Detection rules are code, so they get the same treatment as code: versioned, reviewed, and
-tested. DetectLedger replays public lab recordings of real attacks from
-[OTRF Security-Datasets](https://github.com/OTRF/Security-Datasets) and checks every rule
-against all of them.
+| Technique | Tactics | Rules | Validated on |
+|---|---|---|---|
+| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) LSASS Memory | credential-access | 2 | lsass_comsvcs, mimikatz_logonpasswords |
+| [T1003.002](https://attack.mitre.org/techniques/T1003/002/) Security Account Manager | credential-access | 1 | sam_reg_dump |
+| [T1003.006](https://attack.mitre.org/techniques/T1003/006/) DCSync | credential-access | 1 | dcsync |
+| [T1027](https://attack.mitre.org/techniques/T1027/) Obfuscated Files or Information | defense-evasion | 1 | 5 recordings |
+| [T1047](https://attack.mitre.org/techniques/T1047/) Windows Management Instrumentation | execution | 1 | wmic_add_user |
+| [T1053.005](https://attack.mitre.org/techniques/T1053/005/) Scheduled Task | execution, persistence, privilege-escalation | 1 | schtask_create |
+| [T1059.001](https://attack.mitre.org/techniques/T1059/001/) PowerShell | execution | 1 | 5 recordings |
+| [T1136.001](https://attack.mitre.org/techniques/T1136/001/) Local Account | persistence | 1 | wmic_add_user |
+| [T1543.003](https://attack.mitre.org/techniques/T1543/003/) Windows Service | persistence, privilege-escalation | 1 | psexec |
+| [T1547.001](https://attack.mitre.org/techniques/T1547/001/) Registry Run Keys | persistence, privilege-escalation | 1 | run_key_persistence |
+| [T1569.002](https://attack.mitre.org/techniques/T1569/002/) Service Execution | execution | 1 | psexec |
 
 ## Quick start
 
@@ -59,48 +84,66 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows (macOS/Linux: source .venv/bin/activate)
 pip install -e ".[dev]"
 
-detectledger list               # see available attack recordings
-detectledger fetch --all        # download + load them into data/events.db
-detectledger hunt --show        # run every rule, print alerts
-pytest                          # unit tests + detection regression tests
+detectledger fetch --all        # download the pinned attack recordings, load into data/events.db
+detectledger hunt --show        # run every rule against every recording
+detectledger timeline           # all alerts in UTC order, duplicates merged
+detectledger context <alert_id> # one alert + process launches around it on the same host
+detectledger coverage           # ATT&CK coverage table
+pytest                          # 75 tests: engine, clock, alerts, MCP server, detection regressions
 ```
+
+## AI triage with MCP
+
+`detectledger-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server (stdio),
+written with **no third-party dependencies**: plain JSON-RPC 2.0 over stdin/stdout.
+
+```bash
+claude mcp add detectledger -- /path/to/DetectLedger/.venv/Scripts/detectledger-mcp
+```
+
+Then ask Claude Code something like *"Use detectledger to triage the critical alerts."*
+
+| Tool | Purpose |
+|---|---|
+| `list_alerts` | Alerts in UTC order, filter by severity/recording |
+| `get_alert` | Key fields, rule description, known false positives, ATT&CK mapping |
+| `get_process_context` | Process launches on the same host around the alert |
+| `search_events` | Pivot: one host, bounded time window, event-ID and text filters |
+| `detection_coverage` | Rules and the techniques they cover |
+| prompt `triage_alert` | Report template: verdict, timeline, ATT&CK, scope, actions, detection notes |
+
+**Security design:** read-only SQLite (`mode=ro`); every result is labeled as untrusted
+log-derived data, and the server instructions tell the model never to follow instructions inside
+log fields (a test plants `IGNORE PREVIOUS INSTRUCTIONS` in a command line); results and time
+windows are bounded.
 
 ## How it works
 
-1. **Ingest:** newline-delimited JSON event recordings → SQLite. Common fields (event ID,
-   channel, host, timestamp) become indexed columns; the full original event is kept as JSON
-   so rules can match any field. Datasets are pinned to a specific OTRF commit.
-2. **Detect:** a small Sigma engine (`src/detectledger/sigma.py`) maps each rule's logsource
-   to Windows channels/event IDs (e.g. `process_creation` → Sysmon 1 *and* Security 4688, with
-   field aliasing) and evaluates selections, modifiers, wildcards, and conditions.
-3. **Validate in CI:** [`tests/expectations.yml`](tests/expectations.yml) records exactly how
-   many alerts each rule must produce on its attack, and requires zero on every other dataset.
-   GitHub Actions runs it on every push and posts the matrix to the run summary.
-4. **Triage:** *(planned)* MCP server that lets an AI assistant pull alerts, enrich them, and
-   draft ATT&CK-mapped incident summaries.
-
-## Lessons from real data
-
-- **Silent log-pipeline gaps.** Some recordings were collected by a different pipeline that
-  wrote the channel as `security` instead of `Security`. A case-sensitive match made 481
-  Security events invisible to every rule. Channel matching is now case-insensitive, with a
-  regression test.
-- **Substring traps.** A first draft of the SAM rule matched `\system`, which also matches
-  `C:\Windows\System32\reg.exe` itself, so any full-path `reg save` would alert. The rule now
-  matches full hive paths (`hklm\system`).
-- **The tests catch real regressions.** Loosening the LSASS rule to also allow access mask
-  `0x1000` (routine svchost queries) immediately fails CI: 3 alerts instead of 1.
+1. **Ingest** ([`ingest.py`](src/detectledger/ingest.py)): newline-delimited JSON recordings →
+   SQLite. Indexed columns for common fields; the full original event is kept as JSON so rules can
+   match any field. Datasets are pinned to a fixed OTRF commit so test data can't change.
+2. **Clock alignment** ([`clock.py`](src/detectledger/clock.py)): learns per-recording offsets from
+   events that carry both Sysmon `UtcTime` and another clock, rounded to 15 minutes (time-zone
+   granularity, which also strips collector delay), then corrects the Security-log events.
+3. **Sigma engine** ([`sigma.py`](src/detectledger/sigma.py)): maps logsources to channels/event
+   IDs (`process_creation` → Sysmon 1 **and** Security 4688, with field aliasing), and evaluates
+   modifiers, wildcards, null checks, and `and`/`or`/`not`/`1 of`/`all of` conditions.
+4. **Alerts** ([`alerts.py`](src/detectledger/alerts.py)): merges duplicate copies of the same
+   activity (Sysmon + Security: 20 raw alerts → 11 incidents) and builds investigation context.
+5. **CI** ([`.github/workflows/detections.yml`](.github/workflows/detections.yml)): runs all tests
+   and posts the detection matrix to every run's summary.
 
 ## Limitations
 
-- Rules were written while looking at these recordings, so the true-positive results are
-  expected. The meaningful signal is the **false-positive** side, and that is limited to the
-  background activity inside 8 lab recordings, not a real enterprise baseline.
-- The engine supports the Sigma features these rules use, not the full specification.
-- Security-log events in some recordings only carry `TimeCreated`, which is offset from the
-  Sysmon `UtcTime` in the same recording. Timestamps need normalizing before building
-  cross-source timelines.
+- Rules were written while looking at these recordings, so true positives are expected. The
+  meaningful signal is the **false-positive** check, which covers only the background activity in
+  8 lab recordings, not a real enterprise baseline.
+- The engine implements the Sigma features these rules use, not the full specification.
+- Recordings without Sysmon events can't be clock-aligned; their timestamps are used only if they
+  explicitly claim UTC, and are flagged `unverified`.
 
-## Development
+## Credits
 
+Attack telemetry: [OTRF Security-Datasets](https://github.com/OTRF/Security-Datasets) (Roberto
+Rodriguez and contributors). Detection format: [Sigma](https://sigmahq.io).
 Built with AI-assisted tooling (Claude Code).

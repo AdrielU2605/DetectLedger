@@ -33,3 +33,8 @@ run_key_suspicious_value:
 
 schtask_suspicious_create:
   fires_on: {schtask_create: 2}
+
+# Fires across several recordings on purpose: they all used the same Empire stager. Every hit is
+# attacker activity (the stager launch itself, or its children: whoami /user recon, reg save, WMIC).
+powershell_encoded_hidden_stager:
+  fires_on: {psexec: 4, dcsync: 1, mimikatz_logonpasswords: 1, sam_reg_dump: 1, wmic_add_user: 1}

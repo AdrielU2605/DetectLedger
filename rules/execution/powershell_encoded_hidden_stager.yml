@@ -1,0 +1,61 @@
+title: Hidden Encoded PowerShell Stager or Its Child Process
+id: 72834f1f-2982-4f43-b64d-e9aea844397f
+status: experimental
+description: |
+  Detects PowerShell started with an encoded command AND options that hide it from the user
+  (hidden window, no profile, single-threaded apartment), the launcher pattern used by Empire,
+  Cobalt Strike, and many other frameworks. Also fires on processes whose PARENT is such a
+  stager, because recordings and real investigations often begin after the stager launched.
+  Added after triage of alert 842cd0bc-20967 found the stager was not alerted on by itself
+  (see docs/sample-triage-report.md).
+references:
+  - https://attack.mitre.org/techniques/T1059/001/
+  - https://attack.mitre.org/techniques/T1027/
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.execution
+  - attack.defense_evasion
+  - attack.t1059.001
+  - attack.t1027
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  stager_img:
+    - Image|endswith:
+        - '\powershell.exe'
+        - '\pwsh.exe'
+    - OriginalFileName:
+        - 'PowerShell.EXE'
+        - 'pwsh.dll'
+  stager_encoded:
+    CommandLine|contains:
+      - ' -enc'
+      - ' -ec '
+      - ' -encodedcommand'
+  stager_hidden:
+    CommandLine|contains:
+      - ' -w 1'
+      - ' -w hidden'
+      - ' -windowstyle hidden'
+      - ' -noP '
+  child_parent_img:
+    ParentImage|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+  child_parent_encoded:
+    ParentCommandLine|contains:
+      - ' -enc'
+      - ' -ec '
+      - ' -encodedcommand'
+  child_parent_hidden:
+    ParentCommandLine|contains:
+      - ' -w 1'
+      - ' -w hidden'
+      - ' -windowstyle hidden'
+      - ' -noP '
+  condition: (all of stager_*) or (all of child_*)
+falsepositives:
+  - Some management agents (SCCM, RMM tools) run encoded PowerShell; baseline them by parent process and signer
+level: high
