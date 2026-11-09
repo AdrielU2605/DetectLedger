@@ -1,0 +1,44 @@
+title: Suspicious Process Access to LSASS Memory
+id: 3bd97beb-b4c9-4662-93f7-8dba71296847
+status: experimental
+description: |
+  Detects a process opening lsass.exe with access rights that include reading its memory
+  (PROCESS_VM_READ, 0x0010) or full control. Credential theft tools such as Mimikatz must do
+  this, so the rule catches them by behavior, even when they are renamed or run in-memory
+  inside PowerShell. Routine Windows activity (e.g. svchost at 0x1000) only queries basic info.
+references:
+  - https://attack.mitre.org/techniques/T1003/001/
+  - https://learn.microsoft.com/windows/win32/procthread/process-security-and-access-rights
+author: DetectLedger
+date: 2026-11-10
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+logsource:
+  product: windows
+  category: process_access
+detection:
+  selection:
+    TargetImage|endswith: '\lsass.exe'
+    GrantedAccess:
+      - '0x1010'     # QUERY_LIMITED_INFORMATION | VM_READ   (Mimikatz sekurlsa)
+      - '0x1410'     # + QUERY_INFORMATION                   (MiniDump-style tools)
+      - '0x1438'
+      - '0x143a'
+      - '0x1418'
+      - '0x1f0fff'   # PROCESS_ALL_ACCESS (older Windows)
+      - '0x1f1fff'
+      - '0x1f3fff'
+      - '0x1fffff'   # PROCESS_ALL_ACCESS
+  filter_security_products:
+    SourceImage|endswith:
+      - '\MsMpEng.exe'           # Microsoft Defender
+      - '\MsSense.exe'           # Defender for Endpoint
+  filter_system:
+    SourceImage:
+      - 'C:\Windows\System32\wininit.exe'
+      - 'C:\Windows\System32\csrss.exe'
+  condition: selection and not 1 of filter_*
+falsepositives:
+  - Endpoint security, backup, and monitoring agents that inspect LSASS; add them to a filter after verifying
+level: high

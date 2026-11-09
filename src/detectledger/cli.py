@@ -59,6 +59,33 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_hunt(args) -> int:
+    from .sigma import load_rules, run_rule
+
+    conn = connect(args.db)
+    rules = load_rules(args.rules)
+    loaded = [r["dataset"] for r in conn.execute("SELECT DISTINCT dataset FROM events ORDER BY dataset")]
+    if not loaded:
+        print("No events loaded yet. Try: detectledger fetch --all")
+        return 0
+
+    width = max(len(r.title) for r in rules)
+    short = {d: d[:10] for d in loaded}
+    print(f"{'rule':<{width}}  " + " ".join(f"{short[d]:>10}" for d in loaded))
+    for rule in rules:
+        alerts = run_rule(conn, rule, args.dataset)
+        counts = {d: 0 for d in loaded}
+        for a in alerts:
+            counts[a.dataset] += 1
+        cells = " ".join(f"{(counts[d] or '.'):>10}" for d in loaded)
+        print(f"{rule.title:<{width}}  {cells}")
+        if args.show:
+            for a in alerts:
+                detail = a.event.get("CommandLine") or a.event.get("SourceImage") or ""
+                print(f"    [{a.dataset}] {a.ts} {a.host}  {detail}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="detectledger", description=__doc__)
     p.add_argument("--db", default=DEFAULT_DB, help=f"SQLite database path (default: {DEFAULT_DB})")
@@ -76,6 +103,12 @@ def build_parser() -> argparse.ArgumentParser:
     i.set_defaults(func=cmd_ingest)
 
     sub.add_parser("stats", help="summarize what's loaded").set_defaults(func=cmd_stats)
+
+    h = sub.add_parser("hunt", help="run Sigma rules against loaded events")
+    h.add_argument("--rules", default="rules", help="folder of Sigma .yml rules (default: rules)")
+    h.add_argument("--dataset", help="only search this dataset")
+    h.add_argument("--show", action="store_true", help="print each alert under its rule")
+    h.set_defaults(func=cmd_hunt)
     return p
 
 
