@@ -97,6 +97,46 @@ def cmd_hunt(args) -> int:
     return 0
 
 
+def cmd_timeline(args) -> int:
+    from .alerts import all_alerts, key_fields
+    from .sigma import load_rules
+
+    conn = connect(args.db)
+    alerts = all_alerts(conn, load_rules(args.rules), args.dataset)
+    if not alerts:
+        print("No alerts.")
+        return 0
+    for a in alerts:
+        fields = key_fields(a.event, max_len=110)
+        detail = fields.get("CommandLine") or fields.get("ImagePath") or fields.get("Details") \
+            or fields.get("SourceImage") or fields.get("SubjectUserName") or ""
+        extra = f"  (+{len(a.merged)} duplicate)" if a.merged else ""
+        print(f"{a.ts}  {a.rule.level.upper():<8} {a.id:<15} {a.host or '?':<28} {a.rule.title}{extra}")
+        if detail:
+            print(f"{'':>26}└ {detail}")
+    return 0
+
+
+def cmd_context(args) -> int:
+    from .alerts import context, find_alert, key_fields
+    from .sigma import load_rules
+
+    conn = connect(args.db)
+    alert = find_alert(conn, load_rules(args.rules), args.alert_id)
+    if alert is None:
+        print(f"alert not found: {args.alert_id} (see `detectledger timeline`)", file=sys.stderr)
+        return 1
+    print(f"{alert.rule.title}  [{alert.rule.level}]  {', '.join(alert.rule.techniques)}")
+    print(f"{alert.ts}  {alert.host}  ({alert.dataset})")
+    for k, v in key_fields(alert.event).items():
+        print(f"  {k}: {v}")
+    print(f"\nProcess launches on {alert.host} within ±{args.minutes} min:")
+    for c in context(conn, alert, args.minutes):
+        mark = ">>" if c["is_alert_event"] else "  "
+        print(f"{mark} {c['time_utc']}  {c['user'] or '':<22} {c['command_line'] or c['image']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="detectledger", description=__doc__)
     p.add_argument("--db", default=DEFAULT_DB, help=f"SQLite database path (default: {DEFAULT_DB})")
@@ -121,6 +161,17 @@ def build_parser() -> argparse.ArgumentParser:
     h.add_argument("--show", action="store_true", help="print each alert under its rule")
     h.add_argument("--markdown", action="store_true", help="print the results as a Markdown table")
     h.set_defaults(func=cmd_hunt)
+
+    t = sub.add_parser("timeline", help="all alerts from all rules, in time order (UTC)")
+    t.add_argument("--rules", default="rules")
+    t.add_argument("--dataset", help="only this dataset")
+    t.set_defaults(func=cmd_timeline)
+
+    x = sub.add_parser("context", help="investigate one alert: its fields + nearby process launches")
+    x.add_argument("alert_id", help="ID from `detectledger timeline`, e.g. ae7ddfb2-123")
+    x.add_argument("--minutes", type=int, default=5, help="window before/after the alert (default 5)")
+    x.add_argument("--rules", default="rules")
+    x.set_defaults(func=cmd_context)
     return p
 
 

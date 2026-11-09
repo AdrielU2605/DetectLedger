@@ -349,16 +349,22 @@ class Alert:
     rule: Rule
     dataset: str
     event_rowid: int
-    ts: str | None
+    ts: str | None      # normalized UTC (events.ts_utc)
     host: str | None
     event: dict
+    merged: list[Alert] = field(default_factory=list)  # duplicates folded into this one
+
+    @property
+    def id(self) -> str:
+        """Stable, short alert ID: first block of the rule UUID + the event's row ID."""
+        return f"{self.rule.id.split('-')[0]}-{self.event_rowid}"
 
 
 def run_rule(conn: sqlite3.Connection, rule: Rule, dataset: str | None = None) -> list[Alert]:
     alerts = []
     for source in rule.sources:
         # NOCASE: some collection pipelines write "security" instead of "Security"
-        sql = "SELECT id, dataset, ts, host, raw FROM events WHERE channel = ? COLLATE NOCASE"
+        sql = "SELECT id, dataset, ts_utc AS ts, host, raw FROM events WHERE channel = ? COLLATE NOCASE"
         params: list[Any] = [source.channel]
         if source.event_ids is not None:
             sql += f" AND event_id IN ({','.join('?' * len(source.event_ids))})"

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from . import clock
+
 # Different log shippers name the same thing differently; take the first one present.
 TIMESTAMP_KEYS = ("UtcTime", "@timestamp", "TimeCreated", "EventTime")
 HOST_KEYS = ("Hostname", "Computer", "host")
@@ -58,11 +60,14 @@ def iter_lines(path: Path) -> Iterator[str]:
             yield from fh
 
 
-def normalize(record: dict, dataset: str) -> tuple:
+def normalize(record: dict, dataset: str, offsets: dict) -> tuple:
     """Turn one raw event into a row for the events table."""
+    ts_utc, ts_source = clock.to_utc(record, offsets)
     return (
         dataset,
         _first(record, TIMESTAMP_KEYS),
+        ts_utc,
+        ts_source,
         _event_id(record),
         record.get("Channel"),
         _first(record, PROVIDER_KEYS),
@@ -71,35 +76,40 @@ def normalize(record: dict, dataset: str) -> tuple:
     )
 
 
+def read_records(path: Path) -> tuple[list[dict], int]:
+    """Parse every line; return (valid event objects, number of bad lines)."""
+    records, skipped = [], 0
+    for line in iter_lines(path):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            skipped += 1
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+        else:
+            skipped += 1
+    return records, skipped
+
+
 def ingest_file(conn: sqlite3.Connection, path: str | Path, dataset: str | None = None) -> IngestResult:
-    """Load one recording. Re-ingesting the same dataset name replaces its old rows."""
+    """Load one recording. Re-ingesting the same dataset name replaces its old rows.
+
+    Two passes: first learn this recording's clock offsets (see clock.py), then insert.
+    """
     path = Path(path)
     dataset = dataset or path.name.split(".")[0]
-    inserted = skipped = 0
-    batch: list[tuple] = []
+    records, skipped = read_records(path)
+    offsets = clock.learn_offsets(records)
 
-    sql = "INSERT INTO events (dataset, ts, event_id, channel, provider, host, raw) VALUES (?,?,?,?,?,?,?)"
+    sql = ("INSERT INTO events (dataset, ts, ts_utc, ts_source, event_id, channel, provider, host, raw) "
+           "VALUES (?,?,?,?,?,?,?,?,?)")
     with conn:  # one transaction: either the whole file loads or nothing changes
         conn.execute("DELETE FROM events WHERE dataset = ?", (dataset,))
-        for line in iter_lines(path):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                skipped += 1
-                continue
-            if not isinstance(record, dict):
-                skipped += 1
-                continue
-            batch.append(normalize(record, dataset))
-            if len(batch) >= BATCH_SIZE:
-                conn.executemany(sql, batch)
-                inserted += len(batch)
-                batch.clear()
-        if batch:
-            conn.executemany(sql, batch)
-            inserted += len(batch)
+        for start in range(0, len(records), BATCH_SIZE):
+            conn.executemany(sql, [normalize(r, dataset, offsets) for r in records[start:start + BATCH_SIZE]])
 
-    return IngestResult(dataset, inserted, skipped)
+    return IngestResult(dataset, len(records), skipped)
